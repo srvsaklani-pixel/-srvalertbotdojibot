@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 
 # ============================================================
-# TELEGRAM
+# TELEGRAM SETTINGS
 # ============================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -42,7 +42,7 @@ EMA_PERIOD = 200
 RSI_PERIOD = 14
 
 # ============================================================
-# RSI
+# RSI FUNCTION
 # ============================================================
 
 def calculate_rsi(close, period=14):
@@ -50,9 +50,11 @@ def calculate_rsi(close, period=14):
     delta = close.diff()
 
     gain = delta.clip(lower=0)
+
     loss = -delta.clip(upper=0)
 
     avg_gain = gain.rolling(period).mean()
+
     avg_loss = loss.rolling(period).mean()
 
     rs = avg_gain / avg_loss
@@ -62,152 +64,82 @@ def calculate_rsi(close, period=14):
     return rsi
 
 # ============================================================
-# VALID DOJI
-# ============================================================
-
-def is_valid_doji(candle):
-
-    body = abs(candle['Close'] - candle['Open'])
-
-    candle_range = candle['High'] - candle['Low']
-
-    if candle_range == 0:
-        return False
-
-    body_percent = (body / candle_range) * 100
-
-    # ORIGINAL STRATEGY LOGIC
-
-    if body <= 2:
-        return True
-
-    if body_percent <= 12:
-        return True
-
-    return False
-
-# ============================================================
 # STRATEGY CHECK
 # ============================================================
 
 def check_strategy(df, tf_name):
 
+    # --------------------------------------------------------
+    # EMA200
+    # --------------------------------------------------------
+
     df['EMA200'] = df['Close'].ewm(span=EMA_PERIOD).mean()
+
+    # --------------------------------------------------------
+    # RSI
+    # --------------------------------------------------------
 
     df['RSI'] = calculate_rsi(df['Close'], RSI_PERIOD)
 
+    df = df.dropna().copy()
+
     if len(df) < 5:
         return
+
+    # --------------------------------------------------------
+    # CANDLES
+    # --------------------------------------------------------
 
     doji = df.iloc[-3]
 
     current = df.iloc[-1]
 
-    doji_found = False
+    # --------------------------------------------------------
+    # SAFE FLOAT CONVERSION
+    # --------------------------------------------------------
 
-    # ========================================================
-    # VALID DOJI ?
-    # ========================================================
+    doji_open = float(doji['Open'])
 
-    if is_valid_doji(doji):
+    doji_close = float(doji['Close'])
 
-        # ====================================================
-        # LONG DOJI
-        # ====================================================
+    doji_high = float(doji['High'])
 
-        if doji['Close'] > doji['EMA200'] and doji['RSI'] > 60:
+    doji_low = float(doji['Low'])
 
-            doji_found = True
+    doji_ema = float(doji['EMA200'])
 
-            msg = f"""
-⚠️ VALID LONG DOJI FORMED
+    doji_rsi = float(doji['RSI'])
 
-Symbol: NIFTY
+    current_close = float(current['Close'])
 
-Timeframe: {tf_name}
+    # --------------------------------------------------------
+    # DOJI LOGIC
+    # --------------------------------------------------------
 
-Doji High: {round(doji['High'],2)}
+    body = abs(doji_close - doji_open)
 
-Doji Low: {round(doji['Low'],2)}
+    candle_range = doji_high - doji_low
 
-RSI: {round(doji['RSI'],2)}
+    if candle_range == 0:
+        return
 
-Time: {datetime.now().strftime('%H:%M:%S')}
-"""
+    body_percent = (body / candle_range) * 100
 
-            send_telegram_message(msg)
+    valid_doji = False
 
-            # ENTRY CONFIRMATION
+    # ORIGINAL STRATEGY RULES
 
-            if current['Close'] > doji['High']:
+    if body <= 2:
+        valid_doji = True
 
-                entry_msg = f"""
-🚨 LONG ENTRY CONFIRMED
+    if body_percent <= 12:
+        valid_doji = True
 
-Symbol: NIFTY
-
-Timeframe: {tf_name}
-
-Breakout Above: {round(doji['High'],2)}
-
-Current Price: {round(current['Close'],2)}
-
-Time: {datetime.now().strftime('%H:%M:%S')}
-"""
-
-                send_telegram_message(entry_msg)
-
-        # ====================================================
-        # SHORT DOJI
-        # ====================================================
-
-        elif doji['Close'] < doji['EMA200'] and doji['RSI'] < 40:
-
-            doji_found = True
-
-            msg = f"""
-⚠️ VALID SHORT DOJI FORMED
-
-Symbol: NIFTY
-
-Timeframe: {tf_name}
-
-Doji High: {round(doji['High'],2)}
-
-Doji Low: {round(doji['Low'],2)}
-
-RSI: {round(doji['RSI'],2)}
-
-Time: {datetime.now().strftime('%H:%M:%S')}
-"""
-
-            send_telegram_message(msg)
-
-            # ENTRY CONFIRMATION
-
-            if current['Close'] < doji['Low']:
-
-                entry_msg = f"""
-🚨 SHORT ENTRY CONFIRMED
-
-Symbol: NIFTY
-
-Timeframe: {tf_name}
-
-Breakdown Below: {round(doji['Low'],2)}
-
-Current Price: {round(current['Close'],2)}
-
-Time: {datetime.now().strftime('%H:%M:%S')}
-"""
-
-                send_telegram_message(entry_msg)
-
-    # ========================================================
+    # --------------------------------------------------------
     # NO DOJI FOUND
-    # ========================================================
+    # --------------------------------------------------------
 
-    if not doji_found:
+    if not valid_doji:
 
         no_msg = f"""
 ✅ Scan Completed
@@ -221,9 +153,125 @@ Time: {datetime.now().strftime('%H:%M:%S')}
 
         send_telegram_message(no_msg)
 
+        return
+
+    # ========================================================
+    # LONG SETUP
+    # ========================================================
+
+    if doji_close > doji_ema and doji_rsi > 60:
+
+        msg = f"""
+⚠️ VALID LONG DOJI FORMED
+
+Symbol: NIFTY
+
+Timeframe: {tf_name}
+
+Doji High: {round(doji_high, 2)}
+
+Doji Low: {round(doji_low, 2)}
+
+RSI: {round(doji_rsi, 2)}
+
+Time: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+        send_telegram_message(msg)
+
+        # ----------------------------------------------------
+        # ENTRY CONFIRMATION
+        # ----------------------------------------------------
+
+        if current_close > doji_high:
+
+            entry_msg = f"""
+🚨 LONG ENTRY CONFIRMED
+
+Symbol: NIFTY
+
+Timeframe: {tf_name}
+
+Breakout Above: {round(doji_high, 2)}
+
+Current Price: {round(current_close, 2)}
+
+Time: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+            send_telegram_message(entry_msg)
+
+        return
+
+    # ========================================================
+    # SHORT SETUP
+    # ========================================================
+
+    if doji_close < doji_ema and doji_rsi < 40:
+
+        msg = f"""
+⚠️ VALID SHORT DOJI FORMED
+
+Symbol: NIFTY
+
+Timeframe: {tf_name}
+
+Doji High: {round(doji_high, 2)}
+
+Doji Low: {round(doji_low, 2)}
+
+RSI: {round(doji_rsi, 2)}
+
+Time: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+        send_telegram_message(msg)
+
+        # ----------------------------------------------------
+        # ENTRY CONFIRMATION
+        # ----------------------------------------------------
+
+        if current_close < doji_low:
+
+            entry_msg = f"""
+🚨 SHORT ENTRY CONFIRMED
+
+Symbol: NIFTY
+
+Timeframe: {tf_name}
+
+Breakdown Below: {round(doji_low, 2)}
+
+Current Price: {round(current_close, 2)}
+
+Time: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+            send_telegram_message(entry_msg)
+
+        return
+
+    # ========================================================
+    # DOJI FOUND BUT EMA/RSI FAILED
+    # ========================================================
+
+    no_filter_msg = f"""
+✅ Doji Found But EMA/RSI Conditions Failed
+
+Timeframe: {tf_name}
+
+RSI: {round(doji_rsi, 2)}
+
+Time: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+    send_telegram_message(no_filter_msg)
+
 # ============================================================
 # MAIN
 # ============================================================
+
+print("BOT STARTED")
 
 for symbol in SYMBOLS:
 
@@ -234,15 +282,17 @@ for symbol in SYMBOLS:
             print(f"Checking {symbol} {label}")
 
             df = yf.download(
-
                 symbol,
                 period="10d",
                 interval=interval,
                 progress=False
-
             )
 
             if df.empty:
+
+                send_telegram_message(
+                    f"❌ No data received for {label}"
+                )
 
                 continue
 
@@ -251,14 +301,16 @@ for symbol in SYMBOLS:
         except Exception as e:
 
             error_msg = f"""
-ERROR FOUND
+❌ ERROR FOUND
 
 Timeframe: {label}
 
 Error:
-{e}
+{str(e)}
 """
 
             send_telegram_message(error_msg)
 
             print(e)
+
+print("BOT FINISHED")
