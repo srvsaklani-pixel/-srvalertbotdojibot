@@ -28,12 +28,11 @@ def send_telegram_message(message):
 
 SYMBOLS = ["^NSEI"]
 
-# USE ONLY YFINANCE SUPPORTED INTERVALS
-
 TIMEFRAMES = {
-    "5m": "5MIN",
-    "15m": "15MIN",
-    "30m": "30MIN"
+    "3min": "3MIN",
+    "5min": "5MIN",
+    "10min": "10MIN",
+    "30min": "30MIN"
 }
 
 EMA_PERIOD = 200
@@ -91,13 +90,6 @@ def is_valid_doji(open_price, close_price, high_price, low_price):
 # ============================================================
 
 def check_strategy(df, tf_name):
-
-    # --------------------------------------------------------
-    # FIX MULTI INDEX COLUMNS
-    # --------------------------------------------------------
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
 
     # --------------------------------------------------------
     # EMA200
@@ -189,7 +181,7 @@ Time: {datetime.now().strftime('%H:%M:%S')}
 """
         )
 
-        # ENTRY
+        # ENTRY CONFIRMATION
 
         if current_close > doji_high:
 
@@ -229,7 +221,7 @@ Time: {datetime.now().strftime('%H:%M:%S')}
 """
         )
 
-        # ENTRY
+        # ENTRY CONFIRMATION
 
         if current_close < doji_low:
 
@@ -277,14 +269,21 @@ for symbol in SYMBOLS:
 
             print(f"Checking {symbol} {label}")
 
-            df = yf.download(
+            # ------------------------------------------------
+            # DOWNLOAD LIVE 1MIN DATA
+            # ------------------------------------------------
+
+            base_df = yf.download(
                 symbol,
-                period="10d",
-                interval=interval,
+                period="7d",
+                interval="1m",
                 progress=False
             )
 
-            if df.empty:
+            if isinstance(base_df.columns, pd.MultiIndex):
+                base_df.columns = base_df.columns.get_level_values(0)
+
+            if base_df.empty:
 
                 send_telegram_message(
 f"""❌ No data received
@@ -294,6 +293,22 @@ Timeframe: {label}
                 )
 
                 continue
+
+            # ------------------------------------------------
+            # RESAMPLE
+            # ------------------------------------------------
+
+            df = base_df.resample(interval).agg({
+                'Open': 'first',
+                'High': 'max',
+                'Low': 'min',
+                'Close': 'last',
+                'Volume': 'sum'
+            }).dropna()
+
+            # ------------------------------------------------
+            # CHECK STRATEGY
+            # ------------------------------------------------
 
             check_strategy(df, label)
 
