@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import pytz
 
 # ============================================================
 # TELEGRAM
@@ -24,6 +25,16 @@ def send_telegram_message(message):
     requests.post(url, data=payload)
 
 # ============================================================
+# INDIAN TIME
+# ============================================================
+
+IST = pytz.timezone('Asia/Kolkata')
+
+def indian_time():
+
+    return datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S IST')
+
+# ============================================================
 # SETTINGS
 # ============================================================
 
@@ -41,8 +52,8 @@ RSI_PERIOD = 14
 
 DOJI_ABS = 2
 DOJI_BODY_PCT = 12
+
 EQ_TOLERANCE = 0.5
-MIN_OPPOSITE_BODY = 4
 
 # ============================================================
 # RSI
@@ -79,7 +90,9 @@ def heikin_ashi(df):
     ha['Low'] = df['Low']
     ha['Close'] = df['Close']
 
+    # --------------------------------------------------------
     # HA CLOSE
+    # --------------------------------------------------------
 
     ha['ha_close'] = (
         df['Open'] +
@@ -88,7 +101,9 @@ def heikin_ashi(df):
         df['Close']
     ) / 4
 
+    # --------------------------------------------------------
     # HA OPEN
+    # --------------------------------------------------------
 
     ha_open = []
 
@@ -110,7 +125,9 @@ def heikin_ashi(df):
 
     ha['ha_open'] = ha_open
 
+    # --------------------------------------------------------
     # HA HIGH / LOW
+    # --------------------------------------------------------
 
     ha['ha_high'] = ha[
         ['High', 'ha_open', 'ha_close']
@@ -120,13 +137,17 @@ def heikin_ashi(df):
         ['Low', 'ha_open', 'ha_close']
     ].min(axis=1)
 
+    # --------------------------------------------------------
     # BODY
+    # --------------------------------------------------------
 
     ha['ha_body'] = abs(
         ha['ha_close'] - ha['ha_open']
     )
 
+    # --------------------------------------------------------
     # COLOR
+    # --------------------------------------------------------
 
     ha['ha_color'] = np.where(
         ha['ha_close'] >= ha['ha_open'],
@@ -172,7 +193,7 @@ def is_valid_doji(candle):
 def check_strategy(df, tf_name):
 
     # --------------------------------------------------------
-    # EMA
+    # EMA200
     # --------------------------------------------------------
 
     df['EMA200'] = df['Close'].ewm(
@@ -226,7 +247,8 @@ Timeframe: {tf_name}
 
 No valid strategy doji found.
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+Alert Time:
+{indian_time()}
 """
         )
 
@@ -293,17 +315,26 @@ f"""⚠️ VALID LONG DOJI FORMED
 
 Timeframe: {tf_name}
 
-Doji High: {round(doji['ha_high'],2)}
+🕯️ Doji Candle Time:
+{doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-Doji Low: {round(doji['ha_low'],2)}
+Doji High:
+{round(doji['ha_high'],2)}
 
-RSI: {round(doji['RSI'],2)}
+Doji Low:
+{round(doji['ha_low'],2)}
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+RSI:
+{round(doji['RSI'],2)}
+
+Alert Time:
+{indian_time()}
 """
         )
 
-        # ENTRY
+        # ----------------------------------------------------
+        # ENTRY CONFIRMATION
+        # ----------------------------------------------------
 
         if current['High'] > confirm['ha_high']:
 
@@ -312,11 +343,17 @@ f"""🚨 LONG ENTRY CONFIRMED
 
 Timeframe: {tf_name}
 
-Breakout Above: {round(confirm['ha_high'],2)}
+🕯️ Doji Candle Time:
+{doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-Current Price: {round(current['Close'],2)}
+Breakout Above:
+{round(confirm['ha_high'],2)}
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+Current Price:
+{round(current['Close'],2)}
+
+Alert Time:
+{indian_time()}
 """
             )
 
@@ -333,17 +370,26 @@ f"""⚠️ VALID SHORT DOJI FORMED
 
 Timeframe: {tf_name}
 
-Doji High: {round(doji['ha_high'],2)}
+🕯️ Doji Candle Time:
+{doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-Doji Low: {round(doji['ha_low'],2)}
+Doji High:
+{round(doji['ha_high'],2)}
 
-RSI: {round(doji['RSI'],2)}
+Doji Low:
+{round(doji['ha_low'],2)}
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+RSI:
+{round(doji['RSI'],2)}
+
+Alert Time:
+{indian_time()}
 """
         )
 
-        # ENTRY
+        # ----------------------------------------------------
+        # ENTRY CONFIRMATION
+        # ----------------------------------------------------
 
         if current['Low'] < confirm['ha_low']:
 
@@ -352,11 +398,17 @@ f"""🚨 SHORT ENTRY CONFIRMED
 
 Timeframe: {tf_name}
 
-Breakdown Below: {round(confirm['ha_low'],2)}
+🕯️ Doji Candle Time:
+{doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-Current Price: {round(current['Close'],2)}
+Breakdown Below:
+{round(confirm['ha_low'],2)}
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+Current Price:
+{round(current['Close'],2)}
+
+Alert Time:
+{indian_time()}
 """
             )
 
@@ -371,9 +423,14 @@ f"""✅ Doji Found But Confirmation Failed
 
 Timeframe: {tf_name}
 
-RSI: {round(doji['RSI'],2)}
+🕯️ Doji Candle Time:
+{doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-Time: {datetime.now().strftime('%H:%M:%S')}
+RSI:
+{round(doji['RSI'],2)}
+
+Alert Time:
+{indian_time()}
 """
     )
 
@@ -392,7 +449,7 @@ for symbol in SYMBOLS:
             print(f"Checking {symbol} {label}")
 
             # ------------------------------------------------
-            # DOWNLOAD 1M DATA
+            # DOWNLOAD LIVE 1M DATA
             # ------------------------------------------------
 
             base_df = yf.download(
@@ -401,6 +458,10 @@ for symbol in SYMBOLS:
                 interval="1m",
                 progress=False
             )
+
+            # ------------------------------------------------
+            # FIX MULTI INDEX
+            # ------------------------------------------------
 
             if isinstance(
                 base_df.columns,
@@ -417,6 +478,9 @@ for symbol in SYMBOLS:
 f"""❌ No data received
 
 Timeframe: {label}
+
+Alert Time:
+{indian_time()}
 """
                 )
 
@@ -435,7 +499,7 @@ Timeframe: {label}
             }).dropna()
 
             # ------------------------------------------------
-            # CHECK STRATEGY
+            # STRATEGY CHECK
             # ------------------------------------------------
 
             check_strategy(df, label)
@@ -449,6 +513,9 @@ Timeframe: {label}
 
 Error:
 {str(e)}
+
+Alert Time:
+{indian_time()}
 """
             )
 
