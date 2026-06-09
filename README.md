@@ -1,2 +1,0 @@
-# -srvalertbotdojibot
-Sun rising Doji
