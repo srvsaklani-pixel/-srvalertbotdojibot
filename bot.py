@@ -415,7 +415,69 @@ Alert Time:
         return
 
     # ========================================================
-    # DOJI FOUND BUT CONFIRM FAILED
+    # FAILURE REASONS
+    # ========================================================
+
+    reasons = []
+
+    # --------------------------------------------------------
+    # LONG SIDE CHECKS
+    # --------------------------------------------------------
+
+    if confirm['ha_color'] != 'green':
+        reasons.append("Confirmation candle not GREEN")
+
+    if abs(
+        confirm['ha_open'] -
+        confirm['ha_low']
+    ) > EQ_TOLERANCE:
+        reasons.append(
+            "Bullish candle open not near low"
+        )
+
+    if doji['Close'] <= doji['EMA200']:
+        reasons.append("Doji below EMA200")
+
+    if doji['RSI'] <= 60:
+        reasons.append(
+            f"RSI below 60 ({round(doji['RSI'],2)})"
+        )
+
+    # --------------------------------------------------------
+    # SHORT SIDE CHECKS
+    # --------------------------------------------------------
+
+    if confirm['ha_color'] != 'red':
+        reasons.append("Confirmation candle not RED")
+
+    if abs(
+        confirm['ha_open'] -
+        confirm['ha_high']
+    ) > EQ_TOLERANCE:
+        reasons.append(
+            "Bearish candle open not near high"
+        )
+
+    if doji['Close'] >= doji['EMA200']:
+        reasons.append("Doji above EMA200")
+
+    if doji['RSI'] >= 40:
+        reasons.append(
+            f"RSI above 40 ({round(doji['RSI'],2)})"
+        )
+
+    # --------------------------------------------------------
+    # REMOVE DUPLICATES
+    # --------------------------------------------------------
+
+    reasons = list(set(reasons))
+
+    reason_text = "\n".join(
+        [f"- {r}" for r in reasons]
+    )
+
+    # ========================================================
+    # FAILURE MESSAGE
     # ========================================================
 
     send_telegram_message(
@@ -426,8 +488,8 @@ Timeframe: {tf_name}
 🕯️ Doji Candle Time:
 {doji.name.strftime('%Y-%m-%d %H:%M IST')}
 
-RSI:
-{round(doji['RSI'],2)}
+Reasons:
+{reason_text}
 
 Alert Time:
 {indian_time()}
